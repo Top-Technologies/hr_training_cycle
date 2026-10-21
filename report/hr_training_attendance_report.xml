@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Landscape Paperformat -->
+    <record id="paperformat_training_attendance_landscape" model="report.paperformat">
+        <field name="name">Training Attendance Landscape</field>
+        <field name="default" eval="False"/>
+        <field name="format">A4</field>
+        <field name="orientation">Landscape</field>
+        <field name="margin_top">15</field>
+        <field name="margin_bottom">15</field>
+        <field name="margin_left">10</field>
+        <field name="margin_right">10</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">10</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <!-- Report Action -->
+    <record id="action_report_training_attendance" model="ir.actions.report">
+        <field name="name">Attendance Sheet (HR-OF-010)</field>
+        <field name="model">hr.training.session</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">hr_training_cycle.report_attendance_sheet</field>
+        <field name="report_file">hr_training_cycle.report_attendance_sheet</field>
+        <field name="print_report_name">'Attendance_Sheet_%s' % (object.name.replace('/', '_'))</field>
+        <field name="binding_model_id" ref="model_hr_training_session"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="paperformat_training_attendance_landscape"/>
+    </record>
+
+    <!-- QWeb Template -->
+    <template id="report_attendance_sheet">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <div class="article" style="font-family: Arial, sans-serif; font-size: 11px;">
+                    <!-- Top Form Header -->
+                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                        <div>
+                            <span class="badge bg-secondary" style="font-size: 11px;">Form: HR-OF-010</span>
+                            <h3 class="mt-1 mb-0" style="font-weight: bold; color: #2C3E50;">TRAINING ATTENDANCE SHEET</h3>
+                        </div>
+                        <div class="text-end">
+                            <span style="font-size: 14px; font-weight: bold;" t-esc="o.company_id.name"/><br/>
+                            <span class="text-muted">Ref: </span><strong t-esc="o.name"/>
+                        </div>
+                    </div>
+
+                    <!-- Session Metadata Table -->
+                    <table class="table table-sm table-bordered mb-3" style="background-color: #f8f9fa;">
+                        <tr>
+                            <td style="width: 15%; font-weight: bold;">Training Title:</td>
+                            <td style="width: 35%;"><span t-field="o.title"/></td>
+                            <td style="width: 15%; font-weight: bold;">Venue:</td>
+                            <td style="width: 35%;"><span t-field="o.venue"/></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold;">Training Type:</td>
+                            <td>
+                                <t t-if="o.training_type == 'internal'">
+                                    <span class="badge bg-info text-dark" style="font-size: 10px;">Internal</span>
+                                </t>
+                                <t t-else="">
+                                    <span class="badge bg-warning text-dark" style="font-size: 10px;">External</span>
+                                </t>
+                            </td>
+                            <td style="font-weight: bold;">Target Group:</td>
+                            <td><span t-field="o.target_group"/></td>
+                        </tr>
+                        <tr>
+                            <t t-if="o.training_type == 'internal'">
+                                <td style="font-weight: bold;">Internal Trainer:</td>
+                                <td>
+                                    <strong t-field="o.trainer_employee_id.name"/>
+                                    <span t-if="o.trainer_employee_id and o.trainer_employee_id.job_id" class="text-muted">
+                                        (<span t-field="o.trainer_employee_id.job_id.name"/>)
+                                    </span>
+                                </td>
+                            </t>
+                            <t t-else="">
+                                <td style="font-weight: bold;">Training Provider:</td>
+                                <td>
+                                    <strong t-field="o.provider_id.name"/>
+                                    <span t-if="o.external_trainer" class="text-muted">
+                                        — Instructor: <span t-field="o.external_trainer"/>
+                                    </span>
+                                </td>
+                            </t>
+                            <td style="font-weight: bold;">Dates:</td>
+                            <td>
+                                <span t-field="o.start_date"/> <span t-if="o.end_date and o.end_date != o.start_date">to <span t-field="o.end_date"/></span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- Attendance Details Table -->
+                    <table class="table table-sm table-bordered" style="vertical-align: middle;">
+                        <thead class="table-dark" style="background-color: #34495E; color: white; text-align: center;">
+                            <tr>
+                                <th style="width: 3%;">#</th>
+                                <th style="width: 18%;">Trainee Name</th>
+                                <th style="width: 14%;">Position</th>
+                                <th style="width: 14%;">Department</th>
+                                <!-- Day Signature Columns -->
+                                <t t-foreach="o.day_ids" t-as="day">
+                                    <th style="text-align: center;">
+                                        <div t-esc="day.date.strftime('%d-%b')"/>
+                                        <div style="font-size: 9px; font-weight: normal;">Signature</div>
+                                    </th>
+                                </t>
+                                <th style="width: 6%; text-align: center;">Days</th>
+                                <th style="width: 12%;">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-set="row_idx" t-value="1"/>
+                            <t t-foreach="o.attendee_ids" t-as="attendee">
+                                <tr>
+                                    <td class="text-center"><span t-esc="row_idx"/></td>
+                                    <td><strong t-field="attendee.employee_id.name"/></td>
+                                    <td><span t-field="attendee.job_id.name"/></td>
+                                    <td><span t-field="attendee.department_id.name"/></td>
+                                    <t t-foreach="o.day_ids" t-as="day">
+                                        <td class="text-center" style="min-width: 70px; height: 35px;">
+                                            <t t-if="day.id in attendee.attended_day_ids.ids">
+                                                <span style="color: #27ae60; font-size: 13px; font-weight: bold;">✓</span>
+                                                <div style="border-bottom: 1px dotted #999; margin-top: 10px; width: 85%; margin-left: auto; margin-right: auto;"/>
+                                            </t>
+                                            <t t-else="">
+                                                <span class="text-muted" style="font-size: 9px;">—</span>
+                                            </t>
+                                        </td>
+                                    </t>
+                                    <td class="text-center"><strong t-esc="attendee.days_attended_count"/></td>
+                                    <td></td>
+                                </tr>
+                                <t t-set="row_idx" t-value="row_idx + 1"/>
+                            </t>
+                            <t t-if="not o.attendee_ids">
+                                <tr>
+                                    <td t-att-colspan="5 + len(o.day_ids)" class="text-center text-muted py-3">
+                                        No attendees registered for this session.
+                                    </td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+
+                    <!-- Sign-off Block -->
+                    <div class="row mt-4 pt-3 border-top">
+                        <div class="col-4">
+                            <t t-if="o.training_type == 'internal'">
+                                <strong>Internal Trainer Signature:</strong>
+                                <div style="font-size: 10px; color: #555; min-height: 14px;">
+                                    <span t-field="o.trainer_employee_id.name"/>
+                                </div>
+                            </t>
+                            <t t-else="">
+                                <strong>Training Provider Signature:</strong>
+                                <div style="font-size: 10px; color: #555; min-height: 14px;">
+                                    <span t-field="o.provider_id.name"/>
+                                    <span t-if="o.external_trainer"> (<span t-field="o.external_trainer"/>)</span>
+                                </div>
+                            </t>
+                            <div style="border-bottom: 1px solid #333; margin-top: 25px; width: 80%;"/>
+                            <small class="text-muted">Date: ____ / ____ / ________</small>
+                        </div>
+                        <div class="col-4">
+                            <strong>HR Officer Signature:</strong>
+                            <div style="border-bottom: 1px solid #333; margin-top: 30px; width: 80%;"/>
+                            <small class="text-muted">Date: ____ / ____ / ________</small>
+                        </div>
+                        <div class="col-4">
+                            <strong>Department Head Signature:</strong>
+                            <div style="border-bottom: 1px solid #333; margin-top: 30px; width: 80%;"/>
+                            <small class="text-muted">Date: ____ / ____ / ________</small>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_hr_training_evaluation_tree" model="ir.ui.view">
+        <field name="name">hr.training.evaluation.list</field>
+        <field name="model">hr.training.evaluation</field>
+        <field name="arch" type="xml">
+            <list string="Training Evaluations" sample="1">
+                <field name="name"/>
+                <field name="trainee_id"/>
+                <field name="department_id"/>
+                <field name="session_id"/>
+                <field name="evaluator_id"/>
+                <field name="part_b_due_date" string="Follow-up Due"/>
+                <field name="average_score" string="Avg Score"/>
+                <field name="met_goal" string="Goal Met"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'awaiting_trainee'"
+                       decoration-warning="state == 'awaiting_followup'"
+                       decoration-success="state == 'completed'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_hr_training_evaluation_form" model="ir.ui.view">
+        <field name="name">hr.training.evaluation.form</field>
+        <field name="model">hr.training.evaluation</field>
+        <field name="arch" type="xml">
+            <form string="Employee Post Training Evaluation (HR-OF-011)">
+                <header>
+                    <button name="action_submit_part_a"
+                            string="Submit Self Evaluation"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state != 'awaiting_trainee'"/>
+                    <button name="action_submit_part_b"
+                            string="Submit Manager Evaluation"
+                            type="object"
+                            class="oe_highlight"
+                            invisible="state != 'awaiting_followup'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="awaiting_trainee,awaiting_followup,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Evaluation Reference"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="session_id" readonly="1"/>
+                            <field name="trainee_id" readonly="1"/>
+                            <field name="job_id"/>
+                            <field name="department_id"/>
+                        </group>
+                        <group>
+                            <field name="evaluator_id" readonly="state == 'completed'"/>
+                            <field name="part_b_due_date" readonly="state == 'completed'"/>
+                            <field name="average_score" widget="float" digits="[3,2]" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Employee: Trainee Evaluation" name="part_a">
+                            <group string="Knowledge &amp; Application Assessment">
+                                <field name="is_related_to_job" widget="radio" options="{'horizontal': true}"
+                                       readonly="state != 'awaiting_trainee'" required="1"/>
+                                <field name="additional_knowledge"
+                                       placeholder="Describe the skills and knowledge you gained..."
+                                       readonly="state != 'awaiting_trainee'" required="1"/>
+                                <field name="need_manager_support" widget="radio" options="{'horizontal': true}"
+                                       readonly="state != 'awaiting_trainee'"/>
+                                <field name="manager_support_detail"
+                                       placeholder="Specify the support or tools needed from your manager..."
+                                       invisible="need_manager_support != 'yes'"
+                                       readonly="state != 'awaiting_trainee'"/>
+                                <field name="how_to_apply"
+                                       placeholder="How do you plan to implement this in your daily responsibilities?"
+                                       readonly="state != 'awaiting_trainee'" required="1"/>
+                                <field name="future_training_points"
+                                       placeholder="Suggestions for future training sessions or topics..."
+                                       readonly="state != 'awaiting_trainee'"/>
+                            </group>
+                        </page>
+
+                        <page string="Manager: Direct Manager Follow-Up" name="part_b">
+                            <group string="Performance &amp; Initiative Ratings (1 = No change, 2 = Good, 3 = Very good, 4 = Excellent)">
+                                <group>
+                                    <field name="rating_motivation" readonly="state == 'completed'"/>
+                                    <field name="rating_cost_waste" readonly="state == 'completed'"/>
+                                    <field name="rating_retention" readonly="state == 'completed'"/>
+                                    <field name="rating_discipline" readonly="state == 'completed'"/>
+                                    <field name="rating_attendance" readonly="state == 'completed'"/>
+                                </group>
+                                <group>
+                                    <field name="rating_work_quality" readonly="state == 'completed'"/>
+                                    <field name="rating_morale" readonly="state == 'completed'"/>
+                                    <field name="rating_customer_focus" readonly="state == 'completed'"/>
+                                    <field name="rating_teamwork" readonly="state == 'completed'"/>
+                                    <field name="rating_knowledge_gain" readonly="state == 'completed'"/>
+                                </group>
+                            </group>
+                            <group string="Results &amp; Goal Achievement">
+                                <field name="trainee_results" placeholder="Concrete achievements or performance changes observed..." readonly="state == 'completed'"/>
+                                <field name="met_goal" widget="radio" options="{'horizontal': true}" readonly="state == 'completed'"/>
+                                <field name="not_met_reason" placeholder="Explain why the training did not achieve its objective..."
+                                       invisible="met_goal == 'yes'"
+                                       readonly="state == 'completed'"/>
+                                <field name="manager_comments" placeholder="Recommendations for further training or actions..." readonly="state == 'completed'"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_hr_training_evaluation_search" model="ir.ui.view">
+        <field name="name">hr.training.evaluation.search</field>
+        <field name="model">hr.training.evaluation</field>
+        <field name="arch" type="xml">
+            <search string="Search Training Evaluations">
+                <field name="name" string="Reference"/>
+                <field name="trainee_id"/>
+                <field name="session_id"/>
+                <field name="evaluator_id"/>
+                <separator/>
+                <filter name="awaiting_trainee" string="Awaiting Trainee (Part A)" domain="[('state', '=', 'awaiting_trainee')]"/>
+                <filter name="awaiting_followup" string="Awaiting 6-Month Follow-Up (Part B)" domain="[('state', '=', 'awaiting_followup')]"/>
+                <filter name="completed" string="Completed" domain="[('state', '=', 'completed')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_session" string="Session" domain="[]" context="{'group_by': 'session_id'}"/>
+                    <filter name="group_trainee" string="Trainee" domain="[]" context="{'group_by': 'trainee_id'}"/>
+                    <filter name="group_evaluator" string="Evaluator" domain="[]" context="{'group_by': 'evaluator_id'}"/>
+                    <filter name="group_state" string="Status" domain="[]" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_hr_training_evaluation" model="ir.actions.act_window">
+        <field name="name">Evaluations</field>
+        <field name="res_model">hr.training.evaluation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_hr_training_evaluation_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Post-Training Evaluations (HR-OF-011)
+            </p>
+            <p>
+                Track trainee self-evaluations (Part A) and manager 6-month follow-up performance reviews (Part B).
+            </p>
+        </field>
+    </record>
+</odoo>

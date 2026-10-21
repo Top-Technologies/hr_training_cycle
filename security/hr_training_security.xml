@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        <!-- Category -->
+        <record id="module_category_hr_training" model="ir.module.category">
+            <field name="name">Training</field>
+            <field name="description">Manage employee training needs, sessions, and post-training evaluations.</field>
+            <field name="sequence">25</field>
+        </record>
+
+        <!-- Group: Department Head -->
+        <record id="group_training_department_head" model="res.groups">
+            <field name="name">Department Head</field>
+            <field name="category_id" ref="module_category_hr_training"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+
+        <!-- Group: HR Training Manager -->
+        <record id="group_training_manager" model="res.groups">
+            <field name="name">HR Training Manager</field>
+            <field name="category_id" ref="module_category_hr_training"/>
+            <field name="implied_ids" eval="[(4, ref('group_training_department_head'))]"/>
+        </record>
+
+        <!-- Automatically grant HR Training Manager to HR Officers -->
+        <record id="hr.group_hr_user" model="res.groups">
+            <field name="implied_ids" eval="[(4, ref('group_training_manager'))]"/>
+        </record>
+    </data>
+
+    <data noupdate="1">
+        <!-- Record Rules: Training Need -->
+        <record id="hr_training_need_rule_dept_head" model="ir.rule">
+            <field name="name">Training Need: Department Head Own</field>
+            <field name="model_id" ref="model_hr_training_need"/>
+            <field name="groups" eval="[(4, ref('group_training_department_head'))]"/>
+            <field name="domain_force">['|', '|', ('department_head_id.user_id', '=', user.id), ('create_uid', '=', user.id), ('department_id.manager_id.user_id', '=', user.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="hr_training_need_rule_manager" model="ir.rule">
+            <field name="name">Training Need: HR Manager All</field>
+            <field name="model_id" ref="model_hr_training_need"/>
+            <field name="groups" eval="[(4, ref('group_training_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Record Rules: Training Need Line -->
+        <record id="hr_training_need_line_rule_dept_head" model="ir.rule">
+            <field name="name">Training Need Line: Department Head Own</field>
+            <field name="model_id" ref="model_hr_training_need_line"/>
+            <field name="groups" eval="[(4, ref('group_training_department_head'))]"/>
+            <field name="domain_force">['|', '|', ('need_id.department_head_id.user_id', '=', user.id), ('need_id.create_uid', '=', user.id), ('need_id.department_id.manager_id.user_id', '=', user.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="hr_training_need_line_rule_manager" model="ir.rule">
+            <field name="name">Training Need Line: HR Manager All</field>
+            <field name="model_id" ref="model_hr_training_need_line"/>
+            <field name="groups" eval="[(4, ref('group_training_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Record Rules: Training Session -->
+        <record id="hr_training_session_rule_user" model="ir.rule">
+            <field name="name">Training Session: All Users Read</field>
+            <field name="model_id" ref="model_hr_training_session"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="hr_training_session_rule_manager" model="ir.rule">
+            <field name="name">Training Session: HR Manager Full</field>
+            <field name="model_id" ref="model_hr_training_session"/>
+            <field name="groups" eval="[(4, ref('group_training_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <!-- Record Rules: Training Evaluation -->
+        <record id="hr_training_evaluation_rule_user" model="ir.rule">
+            <field name="name">Training Evaluation: Trainee and Evaluator Own</field>
+            <field name="model_id" ref="model_hr_training_evaluation"/>
+            <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+            <field name="domain_force">['|', ('trainee_id.user_id', '=', user.id), ('evaluator_id.user_id', '=', user.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="hr_training_evaluation_rule_manager" model="ir.rule">
+            <field name="name">Training Evaluation: HR Manager Full</field>
+            <field name="model_id" ref="model_hr_training_evaluation"/>
+            <field name="groups" eval="[(4, ref('group_training_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+    </data>
+</odoo>

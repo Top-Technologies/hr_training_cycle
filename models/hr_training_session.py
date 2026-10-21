@@ -1,0 +1,391 @@
+# -*- coding: utf-8 -*-
+from dateutil.relativedelta import relativedelta
+from odoo import api, fields, models, _
+from odoo.exceptions import UserError, ValidationError
+
+
+class HrTrainingSession(models.Model):
+    _name = 'hr.training.session'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _description = 'Training Attendance & Session (HR-OF-010)'
+    _order = 'id desc'
+
+    name = fields.Char(
+        string='Reference',
+        required=True,
+        copy=False,
+        readonly=True,
+        default='/'
+    )
+    title = fields.Char(
+        string='Title of the Training',
+        required=True,
+        tracking=True
+    )
+    assessment_id = fields.Many2one(
+        'hr.training.need',
+        string='Assessment Reference',
+        tracking=True,
+        domain="[('state', '=', 'approved')]",
+        ondelete='restrict',
+    )
+    training_title_id = fields.Many2one(
+        'hr.training.need.line',
+        string='Training Title',
+        tracking=True,
+        domain="[('need_id', '=', assessment_id)]",
+        ondelete='restrict',
+    )
+    target_group = fields.Char(string='Target Group')
+    venue = fields.Char(string='Venue')
+    training_type = fields.Selection([
+        ('internal', 'Internal'),
+        ('external', 'External'),
+    ], string='Training Type', default='internal', required=True, tracking=True)
+    trainer_employee_id = fields.Many2one(
+        'hr.employee',
+        string='Trainer (Internal)',
+        tracking=True,
+    )
+    provider_id = fields.Many2one(
+        'res.partner',
+        string='Training Provider',
+        tracking=True,
+        help='External company, institution, or provider conducting the training.'
+    )
+    external_trainer = fields.Char(
+        string='External Trainer / Instructor',
+        tracking=True,
+        help='Name of the external instructor or facilitator.'
+    )
+    trainer = fields.Char(
+        string='Training Provided By',
+        compute='_compute_trainer',
+        store=True,
+        readonly=False,
+        precompute=True,
+        tracking=True,
+    )
+    notice = fields.Text(string='Notice')
+
+    day_ids = fields.One2many(
+        'hr.training.session.day',
+        'session_id',
+        string='Training Days'
+    )
+    start_date = fields.Date(
+        string='Start Date',
+        compute='_compute_dates',
+        store=True,
+        tracking=True
+    )
+    end_date = fields.Date(
+        string='End Date',
+        compute='_compute_dates',
+        store=True,
+        tracking=True
+    )
+
+    need_line_ids = fields.Many2many(
+        'hr.training.need.line',
+        'hr_training_session_need_line_rel',
+        'session_id',
+        'need_line_id',
+        string='Approved Needs Covered',
+        domain="[('need_id.state', '=', 'approved')]"
+    )
+    attendee_ids = fields.One2many(
+        'hr.training.attendee',
+        'session_id',
+        string='Attendees'
+    )
+    actual_cost = fields.Monetary(string='Actual Cost', currency_field='currency_id', tracking=True)
+    currency_id = fields.Many2one(
+        'res.currency',
+        string='Currency',
+        default=lambda self: self.env.company.currency_id
+    )
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        default=lambda self: self.env.company
+    )
+
+    evaluation_ids = fields.One2many(
+        'hr.training.evaluation',
+        'session_id',
+        string='Evaluations'
+    )
+    evaluation_count = fields.Integer(
+        string='Evaluations Count',
+        compute='_compute_evaluation_count'
+    )
+
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('planned', 'Planned'),
+        ('done', 'Done'),
+        ('cancelled', 'Cancelled'),
+    ], string='Status', default='draft', tracking=True)
+
+    @api.depends('training_type', 'trainer_employee_id', 'provider_id', 'external_trainer')
+    def _compute_trainer(self):
+        for session in self:
+            if session.training_type == 'internal':
+                if session.trainer_employee_id:
+                    session.trainer = session.trainer_employee_id.name
+                elif not session.trainer:
+                    session.trainer = ''
+            elif session.training_type == 'external':
+                parts = []
+                if session.provider_id:
+                    parts.append(session.provider_id.name)
+                if session.external_trainer:
+                    parts.append(session.external_trainer)
+                if parts:
+                    session.trainer = " - ".join(parts)
+                elif not session.trainer:
+                    session.trainer = ''
+            elif not session.trainer:
+                session.trainer = ''
+
+    @api.onchange('training_type')
+    def _onchange_training_type(self):
+        if self.training_type == 'internal':
+            self.provider_id = False
+            self.external_trainer = False
+        elif self.training_type == 'external':
+            self.trainer_employee_id = False
+
+    @api.depends('day_ids.date')
+    def _compute_dates(self):
+        for session in self:
+            dates = session.day_ids.mapped('date')
+            session.start_date = min(dates) if dates else False
+            session.end_date = max(dates) if dates else False
+
+    @api.depends('evaluation_ids')
+    def _compute_evaluation_count(self):
+        for session in self:
+            session.evaluation_count = len(session.evaluation_ids)
+
+    @api.onchange('assessment_id')
+    def _onchange_assessment_id(self):
+        for session in self:
+            if (
+                session.training_title_id
+                and session.training_title_id.need_id != session.assessment_id
+            ):
+                session.training_title_id = False
+                session.title = False
+
+    @api.onchange('training_title_id')
+    def _onchange_training_title_id(self):
+        for session in self:
+            if session.training_title_id:
+                session.title = session.training_title_id.name or False
+                session.assessment_id = session.training_title_id.need_id
+            else:
+                session.title = False
+
+    @api.constrains('assessment_id', 'training_title_id')
+    def _check_training_title_assessment(self):
+        for session in self:
+            if session.training_title_id and session.assessment_id:
+                if session.training_title_id.need_id != session.assessment_id:
+                    raise ValidationError(_(
+                        "The selected Training Title '%(title)s' does not belong to Assessment Reference '%(assessment)s'.",
+                        title=session.training_title_id.name,
+                        assessment=session.assessment_id.name,
+                    ))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('name', '/') == '/':
+                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.session') or '/'
+            if vals.get('training_title_id'):
+                title_line = self.env['hr.training.need.line'].browse(vals['training_title_id'])
+                if not vals.get('title'):
+                    vals['title'] = title_line.name or False
+                if not vals.get('assessment_id') and title_line.need_id:
+                    vals['assessment_id'] = title_line.need_id.id
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if 'training_title_id' in vals:
+            if vals['training_title_id']:
+                title_line = self.env['hr.training.need.line'].browse(vals['training_title_id'])
+                if 'title' not in vals:
+                    vals['title'] = title_line.name or False
+                if 'assessment_id' not in vals and title_line.need_id:
+                    vals['assessment_id'] = title_line.need_id.id
+            elif 'title' not in vals:
+                vals['title'] = False
+        return super().write(vals)
+
+    def action_load_attendees_from_needs(self):
+        for session in self:
+            existing_trainee_ids = session.attendee_ids.mapped('employee_id').ids
+            trainees_to_add = session.need_line_ids.mapped('trainee_id').filtered(
+                lambda t: t.id not in existing_trainee_ids
+            )
+            new_attendees = []
+            for trainee in trainees_to_add:
+                new_attendees.append((0, 0, {
+                    'employee_id': trainee.id,
+                }))
+            if new_attendees:
+                session.write({'attendee_ids': new_attendees})
+
+    def action_confirm(self):
+        for session in self:
+            if not session.day_ids:
+                raise UserError(_("Please add at least one training day before confirming the session."))
+            session.write({'state': 'planned'})
+            session.message_post(body=_("Training session has been planned."))
+
+    def action_close(self):
+        Evaluation = self.env['hr.training.evaluation']
+        for session in self:
+            if not session.attendee_ids:
+                raise UserError(_("No attendees found in this training session."))
+
+            # Find attendees who were present
+            present_attendees = session.attendee_ids.filtered(
+                lambda a: a.days_attended_count > 0 or not session.day_ids
+            )
+            if not present_attendees:
+                raise UserError(_("No attendees have marked attendance for this session. Please tick days attended for participants."))
+
+            end_date = session.end_date or fields.Date.today()
+            part_b_due_date = end_date + relativedelta(months=6)
+
+            for attendee in present_attendees:
+                # Avoid duplicate evaluations
+                existing_eval = Evaluation.search([
+                    ('session_id', '=', session.id),
+                    ('trainee_id', '=', attendee.employee_id.id),
+                ], limit=1)
+
+                evaluator = attendee.employee_id.parent_id or self.env.user.employee_id
+                if not evaluator:
+                    raise UserError(_("Cannot close training: Trainee %s has no direct manager assigned.") % attendee.employee_id.name)
+
+                if not existing_eval:
+                    evaluation = Evaluation.create({
+                        'session_id': session.id,
+                        'trainee_id': attendee.employee_id.id,
+                        'evaluator_id': evaluator.id,
+                        'part_b_due_date': part_b_due_date,
+                        'state': 'awaiting_trainee',
+                    })
+                else:
+                    evaluation = existing_eval
+
+                # Trainee gets a to-do for Part A, due in 7 days
+                if evaluation.trainee_id.user_id:
+                    # check if activity already scheduled
+                    existing_act = self.env['mail.activity'].search([
+                        ('res_model', '=', 'hr.training.evaluation'),
+                        ('res_id', '=', evaluation.id),
+                        ('user_id', '=', evaluation.trainee_id.user_id.id),
+                    ], limit=1)
+                    if not existing_act:
+                        evaluation.activity_schedule(
+                            'mail.mail_activity_data_todo',
+                            summary=_('Complete Part A Training Evaluation'),
+                            user_id=evaluation.trainee_id.user_id.id,
+                            date_deadline=fields.Date.today() + relativedelta(days=7),
+                            note=_('Please fill out Part A of your post-training evaluation for %s.') % session.title
+                        )
+
+            session.write({'state': 'done'})
+            session.message_post(body=_("Training session closed. Post-training evaluations have been generated."))
+
+    def action_cancel(self):
+        for session in self:
+            session.write({'state': 'cancelled'})
+
+    def action_reset_to_draft(self):
+        for session in self:
+            session.write({'state': 'draft'})
+
+    def action_view_evaluations(self):
+        self.ensure_one()
+        action = self.env['ir.actions.act_window']._for_xml_id('hr_training_cycle.action_hr_training_evaluation')
+        action['domain'] = [('session_id', '=', self.id)]
+        action['context'] = {'default_session_id': self.id}
+        return action
+
+
+class HrTrainingSessionDay(models.Model):
+    _name = 'hr.training.session.day'
+    _description = 'Training Session Day'
+    _order = 'date asc, id asc'
+
+    session_id = fields.Many2one(
+        'hr.training.session',
+        string='Session',
+        ondelete='cascade',
+        required=True
+    )
+    date = fields.Date(string='Date', required=True)
+    name = fields.Char(string='Day Name', compute='_compute_name', store=True)
+
+    @api.depends('date')
+    def _compute_name(self):
+        for day in self:
+            if day.date:
+                day.name = f"{day.date.strftime('%Y-%m-%d')} ({day.date.strftime('%a')})"
+            else:
+                day.name = _("Training Day")
+
+
+class HrTrainingAttendee(models.Model):
+    _name = 'hr.training.attendee'
+    _description = 'Training Attendee'
+    _rec_name = 'employee_id'
+
+    session_id = fields.Many2one(
+        'hr.training.session',
+        string='Session',
+        ondelete='cascade',
+        required=True
+    )
+    employee_id = fields.Many2one('hr.employee', string='Employee', required=True)
+    job_id = fields.Many2one(
+        'hr.job',
+        string='Position',
+        related='employee_id.job_id',
+        store=True,
+        readonly=True
+    )
+    department_id = fields.Many2one(
+        'hr.department',
+        string='Department',
+        related='employee_id.department_id',
+        store=True,
+        readonly=True
+    )
+    attended_day_ids = fields.Many2many(
+        'hr.training.session.day',
+        'hr_training_attendee_day_rel',
+        'attendee_id',
+        'day_id',
+        string='Days Attended'
+    )
+    days_attended_count = fields.Integer(
+        string='Days Attended Count',
+        compute='_compute_days_attended_count',
+        store=True
+    )
+
+    _sql_constraints = [
+        ('uniq_employee_session', 'unique(session_id, employee_id)', 'An employee can only be added once per session!')
+    ]
+
+    @api.depends('attended_day_ids')
+    def _compute_days_attended_count(self):
+        for rec in self:
+            rec.days_attended_count = len(rec.attended_day_ids)

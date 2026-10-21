@@ -1,0 +1,152 @@
+# -*- coding: utf-8 -*-
+from odoo import api, fields, models, _
+from odoo.exceptions import UserError
+
+
+class HrTrainingNeed(models.Model):
+    _name = 'hr.training.need'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _description = 'Training Need Assessment (HR-OF-009)'
+    _order = 'id desc'
+
+    name = fields.Char(
+        string='Reference',
+        required=True,
+        copy=False,
+        readonly=True,
+        default='/'
+    )
+    department_id = fields.Many2one(
+        'hr.department',
+        string='Department',
+        required=True,
+        tracking=True
+    )
+    department_head_id = fields.Many2one(
+        'hr.employee',
+        string='Department Head',
+        default=lambda self: self._default_department_head(),
+        tracking=True
+    )
+    date = fields.Date(
+        string='Date',
+        default=fields.Date.context_today,
+        required=True,
+        tracking=True
+    )
+    currency_id = fields.Many2one(
+        'res.currency',
+        string='Currency',
+        default=lambda self: self.env.company.currency_id
+    )
+    company_id = fields.Many2one(
+        'res.company',
+        string='Company',
+        default=lambda self: self.env.company
+    )
+    line_ids = fields.One2many(
+        'hr.training.need.line',
+        'need_id',
+        string='Training Needs'
+    )
+    total_budget = fields.Monetary(
+        string='Total Budget',
+        compute='_compute_total_budget',
+        store=True,
+        currency_field='currency_id',
+        tracking=True
+    )
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+        ('approved', 'Approved by HR'),
+        ('refused', 'Refused'),
+    ], string='Status', default='draft', tracking=True)
+
+
+    @api.model
+    def _default_department_head(self):
+        return self.env.user.employee_id
+
+    @api.depends('line_ids.budget')
+    def _compute_total_budget(self):
+        for need in self:
+            need.total_budget = sum(need.line_ids.mapped('budget'))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('name', '/') == '/':
+                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.need') or '/'
+        return super().create(vals_list)
+
+    def action_submit(self):
+        for need in self:
+            if not need.line_ids:
+                raise UserError(_("Please add at least one training need line before submitting."))
+            need.write({'state': 'submitted'})
+            need.message_post(body=_("Training Need Assessment submitted for HR approval."))
+
+    def action_approve(self):
+        if not self.env.user.has_group('hr_training_cycle.group_training_manager'):
+            raise UserError(_("Only HR Training Managers can approve training needs."))
+        for need in self:
+            need.write({'state': 'approved'})
+            need.message_post(body=_("Training Need Assessment has been approved by HR."))
+
+    def action_refuse(self):
+        if not self.env.user.has_group('hr_training_cycle.group_training_manager'):
+            raise UserError(_("Only HR Training Managers can refuse training needs."))
+        for need in self:
+            need.write({'state': 'refused'})
+            need.message_post(body=_("Training Need Assessment has been refused by HR."))
+
+    def action_reset_to_draft(self):
+        for need in self:
+            need.write({'state': 'draft'})
+
+
+class HrTrainingNeedLine(models.Model):
+    _name = 'hr.training.need.line'
+    _description = 'Training Need Line'
+
+    need_id = fields.Many2one(
+        'hr.training.need',
+        string='Training Need Sheet',
+        ondelete='cascade',
+        required=True
+    )
+    name = fields.Char(string='Training Title', required=True)
+    trainee_id = fields.Many2one('hr.employee', string='Trainee', required=True)
+    reason = fields.Selection([
+        ('low_performance', 'Low performance'),
+        ('better_productivity', 'Better productivity'),
+        ('new_technology', 'New technology'),
+    ], string='Reason for the training', required=True, default='better_productivity')
+    expected_result = fields.Text(string='Expected Result after Training')
+    duration = fields.Float(string='Duration (days)', default=1.0)
+    budget = fields.Monetary(string='Budget Required', currency_field='currency_id')
+    currency_id = fields.Many2one(
+        'res.currency',
+        string='Currency',
+        related='need_id.currency_id',
+        store=True,
+        readonly=True
+    )
+    session_ids = fields.Many2many(
+        'hr.training.session',
+        'hr_training_session_need_line_rel',
+        'need_line_id',
+        'session_id',
+        string='Training Sessions'
+    )
+    is_planned = fields.Boolean(
+        string='Planned',
+        compute='_compute_is_planned',
+        store=True
+    )
+
+    @api.depends('session_ids')
+    def _compute_is_planned(self):
+        for line in self:
+            line.is_planned = bool(line.session_ids)

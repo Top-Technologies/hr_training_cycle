@@ -1,0 +1,13 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_hr_training_need_dept_head,hr.training.need.dept.head,model_hr_training_need,group_training_department_head,1,1,1,1
+access_hr_training_need_manager,hr.training.need.manager,model_hr_training_need,group_training_manager,1,1,1,1
+access_hr_training_need_line_dept_head,hr.training.need.line.dept.head,model_hr_training_need_line,group_training_department_head,1,1,1,1
+access_hr_training_need_line_manager,hr.training.need.line.manager,model_hr_training_need_line,group_training_manager,1,1,1,1
+access_hr_training_session_user,hr.training.session.user,model_hr_training_session,base.group_user,1,0,0,0
+access_hr_training_session_manager,hr.training.session.manager,model_hr_training_session,group_training_manager,1,1,1,1
+access_hr_training_session_day_user,hr.training.session.day.user,model_hr_training_session_day,base.group_user,1,0,0,0
+access_hr_training_session_day_manager,hr.training.session.day.manager,model_hr_training_session_day,group_training_manager,1,1,1,1
+access_hr_training_attendee_user,hr.training.attendee.user,model_hr_training_attendee,base.group_user,1,0,0,0
+access_hr_training_attendee_manager,hr.training.attendee.manager,model_hr_training_attendee,group_training_manager,1,1,1,1
+access_hr_training_evaluation_user,hr.training.evaluation.user,model_hr_training_evaluation,base.group_user,1,1,0,0
+access_hr_training_evaluation_manager,hr.training.evaluation.manager,model_hr_training_evaluation,group_training_manager,1,1,1,1

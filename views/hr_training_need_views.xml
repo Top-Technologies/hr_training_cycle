@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_hr_training_need_tree" model="ir.ui.view">
+        <field name="name">hr.training.need.list</field>
+        <field name="model">hr.training.need</field>
+        <field name="arch" type="xml">
+            <list string="Training Needs" sample="1">
+                <field name="name"/>
+                <field name="department_id"/>
+                <field name="department_head_id"/>
+                <field name="date"/>
+                <field name="total_budget" sum="Total"/>
+                <field name="currency_id" column_invisible="True"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state == 'submitted'"
+                       decoration-success="state == 'approved'"
+                       decoration-danger="state == 'refused'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_hr_training_need_form" model="ir.ui.view">
+        <field name="name">hr.training.need.form</field>
+        <field name="model">hr.training.need</field>
+        <field name="arch" type="xml">
+            <form string="Training Need Assessment (HR-OF-009)">
+                <header>
+                    <button name="action_submit" string="Submit" type="object"
+                            class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="action_approve" string="Approve" type="object"
+                            class="oe_highlight" invisible="state != 'submitted'"
+                            groups="hr_training_cycle.group_training_manager"/>
+                    <button name="action_refuse" string="Refuse" type="object"
+                            invisible="state != 'submitted'"
+                            groups="hr_training_cycle.group_training_manager"/>
+                    <button name="action_reset_to_draft" string="Reset to Draft" type="object"
+                            invisible="state != 'refused'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,approved"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Assessment Reference"/>
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="department_id" readonly="state != 'draft'"/>
+                            <field name="department_head_id" readonly="state != 'draft'"/>
+                            <field name="date" readonly="state != 'draft'"/>
+                        </group>
+                        <group>
+                            <field name="total_budget" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="company_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Training Needs" name="training_needs">
+                            <field name="line_ids" readonly="state in ('approved', 'refused')">
+                                <list editable="bottom">
+                                    <field name="name" string="Training Title"/>
+                                    <field name="trainee_id"/>
+                                    <field name="reason"/>
+                                    <field name="expected_result"/>
+                                    <field name="duration"/>
+                                    <field name="budget" sum="Total"/>
+                                    <field name="currency_id" column_invisible="True"/>
+                                    <field name="is_planned" widget="boolean" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_hr_training_need_search" model="ir.ui.view">
+        <field name="name">hr.training.need.search</field>
+        <field name="model">hr.training.need</field>
+        <field name="arch" type="xml">
+            <search string="Search Training Needs">
+                <field name="name" string="Reference"/>
+                <field name="department_id"/>
+                <field name="department_head_id"/>
+                <separator/>
+                <filter name="draft" string="Draft" domain="[('state', '=', 'draft')]"/>
+                <filter name="submitted" string="Submitted" domain="[('state', '=', 'submitted')]"/>
+                <filter name="approved" string="Approved by HR" domain="[('state', '=', 'approved')]"/>
+                <filter name="refused" string="Refused" domain="[('state', '=', 'refused')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_department" string="Department" domain="[]" context="{'group_by': 'department_id'}"/>
+                    <filter name="group_head" string="Department Head" domain="[]" context="{'group_by': 'department_head_id'}"/>
+                    <filter name="group_state" string="Status" domain="[]" context="{'group_by': 'state'}"/>
+                    <filter name="group_date" string="Date" domain="[]" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_hr_training_need" model="ir.actions.act_window">
+        <field name="name">Training Needs</field>
+        <field name="res_model">hr.training.need</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_hr_training_need_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new Training Need Assessment (HR-OF-009)
+            </p>
+            <p>
+                Department heads can assess employee training needs, propose budget and expected results, and submit to HR for approval.
+            </p>
+        </field>
+    </record>
+</odoo>

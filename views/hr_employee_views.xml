@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_form_inherit_training" model="ir.ui.view">
+        <field name="name">hr.employee.form.inherit.training</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <!-- Smart Button in Button Box -->
+            <xpath expr="//div[@name='button_box']" position="inside">
+                <button name="action_view_trainings"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-graduation-cap"
+                        groups="hr.group_hr_user">
+                    <field name="training_count" widget="statinfo" string="Trainings"/>
+                </button>
+            </xpath>
+
+            <!-- Training Tab in Notebook -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Training" name="training_tab" groups="hr.group_hr_user">
+                    <field name="training_evaluation_ids" readonly="1">
+                        <list string="Training History">
+                            <field name="session_id" string="Session"/>
+                            <field name="part_b_due_date" string="Follow-up Date"/>
+                            <field name="average_score" string="Average Score"/>
+                            <field name="met_goal" string="Goal Result"/>
+                            <field name="state" widget="badge"
+                                   decoration-info="state == 'awaiting_trainee'"
+                                   decoration-warning="state == 'awaiting_followup'"
+                                   decoration-success="state == 'completed'"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
