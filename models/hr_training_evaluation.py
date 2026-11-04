@@ -31,11 +31,12 @@ class HrTrainingEvaluation(models.Model):
     _order = 'id desc'
 
     name = fields.Char(
-        string='Reference',
+        string='Assessment Reference',
         required=True,
         copy=False,
         readonly=True,
-        default='/'
+        default=lambda self: _('New'),
+        tracking=True
     )
     session_id = fields.Many2one(
         'hr.training.session',
@@ -148,9 +149,7 @@ class HrTrainingEvaluation(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        for vals in vals_list:
-            if vals.get('name', '/') == '/':
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.evaluation') or '/'
+        # Don't generate sequence on create, wait for submit
         return super().create(vals_list)
 
     def action_submit_part_a(self):
@@ -175,8 +174,13 @@ class HrTrainingEvaluation(models.Model):
             if activities:
                 activities.action_feedback(feedback=_("Self Evalation  submitted by trainee."))
 
-            rec.write({'state': 'awaiting_followup'})
-            rec.message_post(body=_("Self Evuation  (Trainee Self-Evaluation) has been completed and submitted."))
+            # Generate sequence number when submitting
+            vals = {'state': 'awaiting_followup'}
+            if rec.name in ('New', '/', False):
+                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.evaluation') or _('New')
+            
+            rec.write(vals)
+            rec.message_post(body=_("Self Evuation  (Trainee Self-Evaluation) has been completed and submitted. Reference: %s") % rec.name)
 
     def action_submit_part_b(self):
         for rec in self:
