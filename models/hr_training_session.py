@@ -15,7 +15,7 @@ class HrTrainingSession(models.Model):
         required=True,
         copy=False,
         readonly=True,
-        default='/'
+        default='New'
     )
     title = fields.Char(
         string='Title of the Training',
@@ -33,7 +33,7 @@ class HrTrainingSession(models.Model):
         'hr.training.need.line',
         string='Training Title',
         tracking=True,
-        domain="[('need_id', '=', assessment_id)]",
+        domain="[('need_id.state', '=', 'approved')]",
         ondelete='restrict',
     )
     target_group = fields.Char(string='Target Group')
@@ -91,7 +91,7 @@ class HrTrainingSession(models.Model):
         'hr_training_session_need_line_rel',
         'session_id',
         'need_line_id',
-        string='Approved Needs Covered',
+        string='Need Lines Covered',
         domain="[('need_id.state', '=', 'approved')]"
     )
     attendee_ids = fields.One2many(
@@ -178,6 +178,21 @@ class HrTrainingSession(models.Model):
             ):
                 session.training_title_id = False
                 session.title = False
+                session.attendee_ids = [(5, 0, 0)]
+
+    def _prepare_attendee_commands(self, trainees):
+        """Build One2many commands to replace attendees with the given trainees."""
+        return [(5, 0, 0)] + [(0, 0, {'employee_id': emp.id}) for emp in trainees]
+
+    def _sync_attendees_from_training_title(self, title_line):
+        """Replace attendees from the training title need line trainees."""
+        self.ensure_one()
+        trainees = title_line.trainee_ids if title_line else self.env['hr.employee']
+        self.attendee_ids = self._prepare_attendee_commands(trainees)
+        if title_line:
+            self.need_line_ids = [(6, 0, [title_line.id])]
+        else:
+            self.need_line_ids = [(5, 0, 0)]
 
     @api.onchange('training_title_id')
     def _onchange_training_title_id(self):
@@ -185,8 +200,14 @@ class HrTrainingSession(models.Model):
             if session.training_title_id:
                 session.title = session.training_title_id.name or False
                 session.assessment_id = session.training_title_id.need_id
+                session.attendee_ids = session._prepare_attendee_commands(
+                    session.training_title_id.trainee_ids
+                )
+                session.need_line_ids = [(6, 0, [session.training_title_id.id])]
             else:
                 session.title = False
+                session.attendee_ids = [(5, 0, 0)]
+                session.need_line_ids = [(5, 0, 0)]
 
     @api.constrains('assessment_id', 'training_title_id')
     def _check_training_title_assessment(self):
@@ -202,18 +223,23 @@ class HrTrainingSession(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
-            if vals.get('name', '/') == '/':
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.session') or '/'
             if vals.get('training_title_id'):
                 title_line = self.env['hr.training.need.line'].browse(vals['training_title_id'])
                 if not vals.get('title'):
                     vals['title'] = title_line.name or False
                 if not vals.get('assessment_id') and title_line.need_id:
                     vals['assessment_id'] = title_line.need_id.id
-        return super().create(vals_list)
+        sessions = super().create(vals_list)
+        for session in sessions:
+            if session.training_title_id and not session.attendee_ids:
+                session._sync_attendees_from_training_title(session.training_title_id)
+        return sessions
 
     def write(self, vals):
+        title_changed = False
         if 'training_title_id' in vals:
+            new_title_id = vals['training_title_id'] or False
+            title_changed = any((s.training_title_id.id or False) != new_title_id for s in self)
             if vals['training_title_id']:
                 title_line = self.env['hr.training.need.line'].browse(vals['training_title_id'])
                 if 'title' not in vals:
@@ -222,27 +248,20 @@ class HrTrainingSession(models.Model):
                     vals['assessment_id'] = title_line.need_id.id
             elif 'title' not in vals:
                 vals['title'] = False
-        return super().write(vals)
-
-    def action_load_attendees_from_needs(self):
-        for session in self:
-            existing_trainee_ids = session.attendee_ids.mapped('employee_id').ids
-            trainees_to_add = session.need_line_ids.mapped('trainee_id').filtered(
-                lambda t: t.id not in existing_trainee_ids
-            )
-            new_attendees = []
-            for trainee in trainees_to_add:
-                new_attendees.append((0, 0, {
-                    'employee_id': trainee.id,
-                }))
-            if new_attendees:
-                session.write({'attendee_ids': new_attendees})
+        res = super().write(vals)
+        if title_changed:
+            for session in self:
+                session._sync_attendees_from_training_title(session.training_title_id)
+        return res
 
     def action_confirm(self):
         for session in self:
             if not session.day_ids:
                 raise UserError(_("Please add at least one training day before confirming the session."))
-            session.write({'state': 'planned'})
+            vals = {'state': 'planned'}
+            if session.name in ('New', '/', False):
+                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.session') or _('New')
+            session.write(vals)
             session.message_post(body=_("Training session has been planned."))
 
     def action_close(self):
