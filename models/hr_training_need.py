@@ -14,7 +14,7 @@ class HrTrainingNeed(models.Model):
         required=True,
         copy=False,
         readonly=True,
-        default='/'
+        default='New'
     )
     department_id = fields.Many2one(
         'hr.department',
@@ -63,7 +63,6 @@ class HrTrainingNeed(models.Model):
         ('refused', 'Refused'),
     ], string='Status', default='draft', tracking=True)
 
-
     @api.model
     def _default_department_head(self):
         return self.env.user.employee_id
@@ -73,18 +72,14 @@ class HrTrainingNeed(models.Model):
         for need in self:
             need.total_budget = sum(need.line_ids.mapped('budget'))
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        for vals in vals_list:
-            if vals.get('name', '/') == '/':
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.need') or '/'
-        return super().create(vals_list)
-
     def action_submit(self):
         for need in self:
             if not need.line_ids:
                 raise UserError(_("Please add at least one training need line before submitting."))
-            need.write({'state': 'submitted'})
+            vals = {'state': 'submitted'}
+            if need.name in ('New', '/', False):
+                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.need') or _('New')
+            need.write(vals)
             need.message_post(body=_("Training Need Assessment submitted for HR approval."))
 
     def action_approve(self):
@@ -117,7 +112,14 @@ class HrTrainingNeedLine(models.Model):
         required=True
     )
     name = fields.Char(string='Training Title', required=True)
-    trainee_id = fields.Many2one('hr.employee', string='Trainee', required=True)
+    trainee_ids = fields.Many2many(
+        'hr.employee',
+        'hr_training_need_line_employee_rel',
+        'line_id',
+        'employee_id',
+        string='Trainees',
+        required=True,
+    )
     reason = fields.Selection([
         ('low_performance', 'Low performance'),
         ('better_productivity', 'Better productivity'),
