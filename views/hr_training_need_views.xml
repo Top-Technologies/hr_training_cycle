@@ -64,7 +64,7 @@
                             <field name="line_ids" readonly="state in ('approved', 'refused')">
                                 <list editable="bottom">
                                     <field name="name" string="Training Title"/>
-                                    <field name="trainee_id"/>
+                                    <field name="trainee_ids" widget="many2many_tags"/>
                                     <field name="reason"/>
                                     <field name="expected_result"/>
                                     <field name="duration"/>

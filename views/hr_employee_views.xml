@@ -19,16 +19,19 @@
             <!-- Training Tab in Notebook -->
             <xpath expr="//notebook" position="inside">
                 <page string="Training" name="training_tab" groups="hr.group_hr_user">
-                    <field name="training_evaluation_ids" readonly="1">
-                        <list string="Training History">
-                            <field name="session_id" string="Session"/>
-                            <field name="part_b_due_date" string="Follow-up Date"/>
-                            <field name="average_score" string="Average Score"/>
-                            <field name="met_goal" string="Goal Result"/>
+                    <field name="training_session_ids" readonly="1">
+                        <list string="Trainings Taken">
+                            <field name="name" string="Reference"/>
+                            <field name="title"/>
+                            <field name="training_type"/>
+                            <field name="start_date"/>
+                            <field name="end_date"/>
+                            <field name="venue"/>
                             <field name="state" widget="badge"
-                                   decoration-info="state == 'awaiting_trainee'"
-                                   decoration-warning="state == 'awaiting_followup'"
-                                   decoration-success="state == 'completed'"/>
+                                   decoration-info="state == 'draft'"
+                                   decoration-primary="state == 'planned'"
+                                   decoration-success="state == 'done'"
+                                   decoration-muted="state == 'cancelled'"/>
                         </list>
                     </field>
                 </page>
