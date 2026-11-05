@@ -259,8 +259,12 @@ class HrTrainingSession(models.Model):
             if not session.day_ids:
                 raise UserError(_("Please add at least one training day before confirming the session."))
             vals = {'state': 'planned'}
-            if session.name in ('New', '/', False):
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.session') or _('New')
+            if not session.name or session.name in ('New', '/', False):
+                seq = self.env['ir.sequence'].sudo().next_by_code('hr.training.session')
+                if not seq or seq in ('New', '/'):
+                    sequence = self.env['ir.sequence'].sudo().search([('code', '=', 'hr.training.session')], limit=1)
+                    seq = sequence._next() if sequence else False
+                vals['name'] = seq or _('New')
             session.write(vals)
             session.message_post(body=_("Training session has been planned."))
 

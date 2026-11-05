@@ -67,6 +67,36 @@ class HrTrainingNeed(models.Model):
     def _default_department_head(self):
         return self.env.user.employee_id
 
+    @api.model
+    def _get_next_sequence(self):
+        """Fetch next sequence safely with sudo, company fallback, and auto-recovery."""
+        seq = self.env['ir.sequence'].sudo().next_by_code('hr.training.need')
+        if not seq or seq in ('New', '/'):
+            # Fallback 1: Search sequence regardless of company
+            sequence = self.env['ir.sequence'].sudo().search([('code', '=', 'hr.training.need')], limit=1)
+            if sequence:
+                seq = sequence._next()
+            else:
+                # Fallback 2: Auto-create sequence if missing from database
+                sequence = self.env['ir.sequence'].sudo().create({
+                    'name': 'Training Need Assessment Reference',
+                    'code': 'hr.training.need',
+                    'prefix': 'TNA/%(year)s/',
+                    'padding': 4,
+                    'number_increment': 1,
+                    'number_next': 1,
+                    'company_id': False,
+                })
+                seq = sequence._next()
+        return seq or 'TNA/%s/0001' % fields.Date.today().year
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('name') or vals.get('name') in ('New', '/'):
+                vals['name'] = self._get_next_sequence()
+        return super().create(vals_list)
+
     @api.depends('line_ids.budget')
     def _compute_total_budget(self):
         for need in self:
@@ -77,8 +107,8 @@ class HrTrainingNeed(models.Model):
             if not need.line_ids:
                 raise UserError(_("Please add at least one training need line before submitting."))
             vals = {'state': 'submitted'}
-            if need.name in ('New', '/', False):
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.need') or _('New')
+            if not need.name or need.name in ('New', '/'):
+                vals['name'] = self._get_next_sequence()
             need.write(vals)
             need.message_post(body=_("Training Need Assessment submitted for HR approval."))
 
@@ -86,8 +116,18 @@ class HrTrainingNeed(models.Model):
         if not self.env.user.has_group('hr_training_cycle.group_training_manager'):
             raise UserError(_("Only HR Training Managers can approve training needs."))
         for need in self:
-            need.write({'state': 'approved'})
+            vals = {'state': 'approved'}
+            if not need.name or need.name in ('New', '/'):
+                vals['name'] = self._get_next_sequence()
+            need.write(vals)
             need.message_post(body=_("Training Need Assessment has been approved by HR."))
+
+    def action_assign_missing_reference(self):
+        """Utility to assign reference numbers to existing records showing 'New' or '/'."""
+        for need in self:
+            if not need.name or need.name in ('New', '/'):
+                need.name = self._get_next_sequence()
+        return True
 
     def action_refuse(self):
         if not self.env.user.has_group('hr_training_cycle.group_training_manager'):

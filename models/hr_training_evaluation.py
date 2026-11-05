@@ -176,8 +176,12 @@ class HrTrainingEvaluation(models.Model):
 
             # Generate sequence number when submitting
             vals = {'state': 'awaiting_followup'}
-            if rec.name in ('New', '/', False):
-                vals['name'] = self.env['ir.sequence'].next_by_code('hr.training.evaluation') or _('New')
+            if not rec.name or rec.name in ('New', '/', False):
+                seq = self.env['ir.sequence'].sudo().next_by_code('hr.training.evaluation')
+                if not seq or seq in ('New', '/'):
+                    sequence = self.env['ir.sequence'].sudo().search([('code', '=', 'hr.training.evaluation')], limit=1)
+                    seq = sequence._next() if sequence else False
+                vals['name'] = seq or _('New')
             
             rec.write(vals)
             rec.message_post(body=_("Self Evuation  (Trainee Self-Evaluation) has been completed and submitted. Reference: %s") % rec.name)

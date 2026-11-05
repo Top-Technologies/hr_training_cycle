@@ -120,4 +120,16 @@
             </p>
         </field>
     </record>
+
+    <!-- Server Action: Assign Missing Reference -->
+    <record id="action_server_assign_training_need_reference" model="ir.actions.server">
+        <field name="name">Assign Missing Reference</field>
+        <field name="model_id" ref="model_hr_training_need"/>
+        <field name="binding_model_id" ref="model_hr_training_need"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="state">code</field>
+        <field name="code">
+records.action_assign_missing_reference()
+        </field>
+    </record>
 </odoo>
