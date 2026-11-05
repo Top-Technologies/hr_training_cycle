@@ -211,19 +211,17 @@ class HrTrainingNeedLine(models.Model):
     is_planned = fields.Boolean(
         string='Planned',
         compute='_compute_session_status',
-        store=True
     )
     is_completed = fields.Boolean(
         string='Completed',
         compute='_compute_session_status',
-        store=True
     )
     session_state = fields.Selection([
         ('draft', 'Draft'),
         ('planned', 'Planned'),
         ('done', 'Completed'),
         ('cancelled', 'Cancelled'),
-    ], string='Session Status', compute='_compute_session_status', store=True)
+    ], string='Session Status', compute='_compute_session_status')
 
     @api.depends('session_ids.state', 'need_id.session_ids.state', 'need_id.session_ids.training_title_id')
     def _compute_session_status(self):

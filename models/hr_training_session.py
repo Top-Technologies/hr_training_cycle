@@ -40,7 +40,6 @@ class HrTrainingSession(models.Model):
         'hr.department',
         string='Department',
         related='assessment_id.department_id',
-        store=True,
         readonly=True,
     )
     department_head_id = fields.Many2one(
