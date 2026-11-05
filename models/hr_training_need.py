@@ -63,6 +63,32 @@ class HrTrainingNeed(models.Model):
         ('refused', 'Refused'),
     ], string='Status', default='draft', tracking=True)
 
+    session_ids = fields.One2many(
+        'hr.training.session',
+        'assessment_id',
+        string='Training Sessions',
+    )
+    session_count = fields.Integer(
+        string='Sessions Count',
+        compute='_compute_session_count',
+    )
+
+    @api.depends('session_ids')
+    def _compute_session_count(self):
+        for need in self:
+            need.session_count = len(need.session_ids)
+
+    def action_view_sessions(self):
+        self.ensure_one()
+        return {
+            'name': _('Training Sessions'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'hr.training.session',
+            'view_mode': 'list,form',
+            'domain': [('assessment_id', '=', self.id)],
+            'context': {'default_assessment_id': self.id},
+        }
+
     @api.model
     def _default_department_head(self):
         return self.env.user.employee_id
@@ -184,11 +210,36 @@ class HrTrainingNeedLine(models.Model):
     )
     is_planned = fields.Boolean(
         string='Planned',
-        compute='_compute_is_planned',
+        compute='_compute_session_status',
         store=True
     )
+    is_completed = fields.Boolean(
+        string='Completed',
+        compute='_compute_session_status',
+        store=True
+    )
+    session_state = fields.Selection([
+        ('draft', 'Draft'),
+        ('planned', 'Planned'),
+        ('done', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ], string='Session Status', compute='_compute_session_status', store=True)
 
-    @api.depends('session_ids')
-    def _compute_is_planned(self):
+    @api.depends('session_ids.state', 'need_id.session_ids.state', 'need_id.session_ids.training_title_id')
+    def _compute_session_status(self):
         for line in self:
-            line.is_planned = bool(line.session_ids)
+            all_sessions = line.session_ids | line.need_id.session_ids.filtered(lambda s: s.training_title_id == line)
+            states = all_sessions.mapped('state')
+            line.is_planned = bool(all_sessions)
+            if 'done' in states:
+                line.session_state = 'done'
+                line.is_completed = True
+            elif 'planned' in states:
+                line.session_state = 'planned'
+                line.is_completed = False
+            elif 'draft' in states:
+                line.session_state = 'draft'
+                line.is_completed = False
+            else:
+                line.session_state = False
+                line.is_completed = False

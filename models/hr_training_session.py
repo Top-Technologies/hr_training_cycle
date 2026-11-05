@@ -36,6 +36,52 @@ class HrTrainingSession(models.Model):
         domain="[('need_id.state', '=', 'approved')]",
         ondelete='restrict',
     )
+    department_id = fields.Many2one(
+        'hr.department',
+        string='Department',
+        related='assessment_id.department_id',
+        store=True,
+        readonly=True,
+    )
+    department_head_id = fields.Many2one(
+        'hr.employee',
+        string='Department Head',
+        related='assessment_id.department_head_id',
+        readonly=True,
+    )
+    assessment_date = fields.Date(
+        string='Assessment Date',
+        related='assessment_id.date',
+        readonly=True,
+    )
+    expected_result = fields.Text(
+        string='Expected Result',
+        related='training_title_id.expected_result',
+        readonly=True,
+    )
+    training_duration = fields.Float(
+        string='Planned Duration (Days)',
+        related='training_title_id.duration',
+        readonly=True,
+    )
+    proposed_budget = fields.Monetary(
+        string='Proposed Budget',
+        related='training_title_id.budget',
+        currency_field='currency_id',
+        readonly=True,
+    )
+    total_attendees = fields.Integer(
+        string='Total Enrolled',
+        compute='_compute_attendance_metrics',
+    )
+    present_attendees = fields.Integer(
+        string='Attended',
+        compute='_compute_attendance_metrics',
+    )
+    attendance_rate = fields.Float(
+        string='Attendance Rate (%)',
+        compute='_compute_attendance_metrics',
+    )
     target_group = fields.Char(string='Target Group')
     venue = fields.Char(string='Venue')
     training_type = fields.Selection([
@@ -149,6 +195,15 @@ class HrTrainingSession(models.Model):
             elif not session.trainer:
                 session.trainer = ''
 
+    @api.depends('attendee_ids', 'attendee_ids.days_attended_count', 'day_ids')
+    def _compute_attendance_metrics(self):
+        for session in self:
+            total = len(session.attendee_ids)
+            present = len(session.attendee_ids.filtered(lambda a: a.days_attended_count > 0 or not session.day_ids)) if total else 0
+            session.total_attendees = total
+            session.present_attendees = present
+            session.attendance_rate = round((present / total * 100.0), 1) if total else 0.0
+
     @api.onchange('training_type')
     def _onchange_training_type(self):
         if self.training_type == 'internal':
@@ -172,13 +227,45 @@ class HrTrainingSession(models.Model):
     @api.onchange('assessment_id')
     def _onchange_assessment_id(self):
         for session in self:
-            if (
-                session.training_title_id
-                and session.training_title_id.need_id != session.assessment_id
-            ):
+            domain = [('need_id.state', '=', 'approved')]
+            if session.assessment_id:
+                domain = [('need_id', '=', session.assessment_id.id)]
+                if session.assessment_id.department_id and not session.target_group:
+                    session.target_group = session.assessment_id.department_id.name
+
+                lines = session.assessment_id.line_ids
+                if len(lines) == 1:
+                    line = lines[0]
+                    session.training_title_id = line
+                    session.title = line.name or False
+                    session.need_line_ids = [(6, 0, [line.id])]
+                    if line.trainee_ids:
+                        session.attendee_ids = session._prepare_attendee_commands(line.trainee_ids)
+                    if not session.actual_cost and line.budget:
+                        session.actual_cost = line.budget
+                elif lines:
+                    if session.training_title_id and session.training_title_id.need_id == session.assessment_id:
+                        pass
+                    else:
+                        line = lines[0]
+                        session.training_title_id = line
+                        session.title = line.name or False
+                        session.need_line_ids = [(6, 0, [line.id])]
+                        if line.trainee_ids:
+                            session.attendee_ids = session._prepare_attendee_commands(line.trainee_ids)
+                        if not session.actual_cost and line.budget:
+                            session.actual_cost = line.budget
+                else:
+                    session.training_title_id = False
+                    session.title = False
+                    session.attendee_ids = [(5, 0, 0)]
+                    session.need_line_ids = [(5, 0, 0)]
+            else:
                 session.training_title_id = False
                 session.title = False
                 session.attendee_ids = [(5, 0, 0)]
+                session.need_line_ids = [(5, 0, 0)]
+            return {'domain': {'training_title_id': domain}}
 
     def _prepare_attendee_commands(self, trainees):
         """Build One2many commands to replace attendees with the given trainees."""
@@ -198,12 +285,17 @@ class HrTrainingSession(models.Model):
     def _onchange_training_title_id(self):
         for session in self:
             if session.training_title_id:
-                session.title = session.training_title_id.name or False
-                session.assessment_id = session.training_title_id.need_id
-                session.attendee_ids = session._prepare_attendee_commands(
-                    session.training_title_id.trainee_ids
-                )
-                session.need_line_ids = [(6, 0, [session.training_title_id.id])]
+                line = session.training_title_id
+                session.title = line.name or False
+                if not session.assessment_id and line.need_id:
+                    session.assessment_id = line.need_id
+                if line.trainee_ids:
+                    session.attendee_ids = session._prepare_attendee_commands(line.trainee_ids)
+                session.need_line_ids = [(6, 0, [line.id])]
+                if not session.actual_cost and line.budget:
+                    session.actual_cost = line.budget
+                if line.need_id.department_id and not session.target_group:
+                    session.target_group = line.need_id.department_id.name
             else:
                 session.title = False
                 session.attendee_ids = [(5, 0, 0)]
@@ -229,14 +321,35 @@ class HrTrainingSession(models.Model):
                     vals['title'] = title_line.name or False
                 if not vals.get('assessment_id') and title_line.need_id:
                     vals['assessment_id'] = title_line.need_id.id
+                if not vals.get('actual_cost') and title_line.budget:
+                    vals['actual_cost'] = title_line.budget
+                if not vals.get('target_group') and title_line.need_id.department_id:
+                    vals['target_group'] = title_line.need_id.department_id.name
+            elif vals.get('assessment_id'):
+                assessment = self.env['hr.training.need'].browse(vals['assessment_id'])
+                if not vals.get('target_group') and assessment.department_id:
+                    vals['target_group'] = assessment.department_id.name
+                if assessment.line_ids:
+                    first_line = assessment.line_ids[0]
+                    if not vals.get('training_title_id'):
+                        vals['training_title_id'] = first_line.id
+                    if not vals.get('title'):
+                        vals['title'] = first_line.name or False
+                    if not vals.get('actual_cost') and first_line.budget:
+                        vals['actual_cost'] = first_line.budget
         sessions = super().create(vals_list)
         for session in sessions:
             if session.training_title_id and not session.attendee_ids:
                 session._sync_attendees_from_training_title(session.training_title_id)
+            elif session.assessment_id and not session.attendee_ids:
+                all_trainees = session.assessment_id.line_ids.mapped('trainee_ids')
+                if all_trainees:
+                    session.attendee_ids = session._prepare_attendee_commands(all_trainees)
         return sessions
 
     def write(self, vals):
         title_changed = False
+        assessment_changed = False
         if 'training_title_id' in vals:
             new_title_id = vals['training_title_id'] or False
             title_changed = any((s.training_title_id.id or False) != new_title_id for s in self)
@@ -248,10 +361,23 @@ class HrTrainingSession(models.Model):
                     vals['assessment_id'] = title_line.need_id.id
             elif 'title' not in vals:
                 vals['title'] = False
+        elif 'assessment_id' in vals:
+            new_assessment_id = vals['assessment_id'] or False
+            assessment_changed = any((s.assessment_id.id or False) != new_assessment_id for s in self)
+
         res = super().write(vals)
         if title_changed:
             for session in self:
-                session._sync_attendees_from_training_title(session.training_title_id)
+                if session.training_title_id:
+                    session._sync_attendees_from_training_title(session.training_title_id)
+        elif assessment_changed:
+            for session in self:
+                if session.assessment_id and not session.training_title_id:
+                    lines = session.assessment_id.line_ids
+                    if len(lines) == 1:
+                        session.training_title_id = lines[0]
+                        session.title = lines[0].name
+                        session._sync_attendees_from_training_title(lines[0])
         return res
 
     def action_confirm(self):

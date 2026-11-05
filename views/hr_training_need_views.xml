@@ -41,6 +41,15 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,submitted,approved"/>
                 </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_sessions"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-calendar"
+                                invisible="session_count == 0">
+                            <field name="session_count" widget="statinfo" string="Sessions"/>
+                        </button>
+                    </div>
                     <div class="oe_title">
                         <label for="name" string="Assessment Reference"/>
                         <h1>
@@ -70,7 +79,11 @@
                                     <field name="duration"/>
                                     <field name="budget" sum="Total"/>
                                     <field name="currency_id" column_invisible="True"/>
-                                    <field name="is_planned" widget="boolean" readonly="1"/>
+                                    <field name="session_state" string="Session Status" widget="badge"
+                                           decoration-info="session_state == 'draft'"
+                                           decoration-primary="session_state == 'planned'"
+                                           decoration-success="session_state == 'done'"
+                                           readonly="1"/>
                                 </list>
                             </field>
                         </page>

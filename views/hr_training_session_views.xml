@@ -56,6 +56,18 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,planned,done"/>
                 </header>
                 <sheet>
+                    <!-- Completed Session Status Banner -->
+                    <div class="alert alert-success d-flex align-items-center justify-content-between p-2 mb-2" role="status" invisible="state != 'done'">
+                        <div>
+                            <i class="fa fa-check-circle me-1"/> <strong>Training Session Completed!</strong> Post-training evaluations have been automatically dispatched for participants.
+                        </div>
+                        <div class="d-flex gap-3">
+                            <span><strong>Enrolled:</strong> <field name="total_attendees" readonly="1" class="oe_inline"/></span>
+                            <span><strong>Attended:</strong> <field name="present_attendees" readonly="1" class="oe_inline"/></span>
+                            <span><strong>Attendance Rate:</strong> <field name="attendance_rate" readonly="1" class="oe_inline"/>%</span>
+                        </div>
+                    </div>
+
                     <div class="oe_button_box" name="button_box">
                         <button name="action_view_evaluations"
                                 type="object"
@@ -72,15 +84,23 @@
                         </h1>
                     </div>
                     <group>
-                        <group>
+                        <group string="Need Assessment &amp; Objectives">
                             <field name="assessment_id"
                                    options="{'no_create': True, 'no_create_edit': True}"
                                    readonly="state == 'done'"/>
                             <field name="training_title_id"
-                                   domain="[('need_id.state', '=', 'approved')]"
+                                   domain="[('need_id', '=', assessment_id)] if assessment_id else [('need_id.state', '=', 'approved')]"
                                    options="{'no_create': True, 'no_create_edit': True}"
                                    readonly="state == 'done'"/>
+                            <field name="department_id" invisible="not department_id"/>
+                            <field name="department_head_id" invisible="not department_head_id"/>
+                            <field name="training_duration" invisible="training_duration == 0"/>
+                            <field name="proposed_budget" invisible="proposed_budget == 0"/>
                             <field name="title" invisible="1"/>
+                            <field name="target_group" readonly="state == 'done'"/>
+                            <field name="venue" readonly="state == 'done'"/>
+                        </group>
+                        <group string="Logistics &amp; Trainer">
                             <field name="training_type" widget="radio" options="{'horizontal': True}" readonly="state == 'done'"/>
                             <field name="trainer_employee_id"
                                    invisible="training_type != 'internal'"
@@ -94,10 +114,6 @@
                                    invisible="training_type != 'external'"
                                    readonly="state == 'done'"/>
                             <field name="trainer" invisible="1"/>
-                            <field name="target_group" readonly="state == 'done'"/>
-                            <field name="venue" readonly="state == 'done'"/>
-                        </group>
-                        <group>
                             <field name="start_date" readonly="1"/>
                             <field name="end_date" readonly="1"/>
                             <field name="actual_cost" readonly="state == 'done'"/>
@@ -126,6 +142,32 @@
                                     <field name="days_attended_count" readonly="1"/>
                                 </list>
                             </field>
+                        </page>
+                        <page string="Evaluations &amp; Results" name="evaluations" invisible="state != 'done' and evaluation_count == 0">
+                            <field name="evaluation_ids" readonly="1">
+                                <list decoration-success="state == 'completed'"
+                                      decoration-warning="state == 'awaiting_followup'"
+                                      decoration-info="state == 'awaiting_trainee'">
+                                    <field name="name" string="Assessment Reference"/>
+                                    <field name="trainee_id" string="Trainee"/>
+                                    <field name="evaluator_id" string="Evaluator / Manager"/>
+                                    <field name="part_b_due_date" string="6-Month Follow-Up"/>
+                                    <field name="average_score" string="Avg Score (1-4)"/>
+                                    <field name="met_goal" string="Goal Result" widget="badge"
+                                           decoration-success="met_goal == 'yes'"
+                                           decoration-danger="met_goal == 'no'"
+                                           decoration-warning="met_goal == 'partially'"/>
+                                    <field name="state" string="Evaluation Status" widget="badge"
+                                           decoration-info="state == 'awaiting_trainee'"
+                                           decoration-warning="state == 'awaiting_followup'"
+                                           decoration-success="state == 'completed'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Expected Competencies / Outcomes" name="expected_results" invisible="not expected_result">
+                            <group>
+                                <field name="expected_result" string="Expected Outcome" readonly="1"/>
+                            </group>
                         </page>
                         <page string="Notice &amp; Instructions" name="notice">
                             <field name="notice" placeholder="Special instructions, materials required, or trainee notice..." readonly="state == 'done'"/>

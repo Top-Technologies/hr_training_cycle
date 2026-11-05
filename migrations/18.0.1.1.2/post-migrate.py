@@ -51,3 +51,4 @@ def migrate(cr, version):
     )
     for ev in evals:
         ev.name = env['ir.sequence'].next_by_code('hr.training.evaluation')
+
